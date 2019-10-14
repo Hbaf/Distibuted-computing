@@ -14,9 +14,7 @@ int send(void *self, local_id dst, const Message *msg)
     local_id src = *(int *) self;
 
     if (src == dst) return -1;
-
-    if (write(ppfd[src][dst][FD_WRITE], msg, sizeof(MessageHeader) + msg->s_header.s_payload_len)) return 0;
-    return -1;
+    return write(ppfd[src][dst][FD_WRITE], msg, sizeof(MessageHeader) + msg->s_header.s_payload_len);
 }
 
 int send_multicast(void *self, const Message *msg)
@@ -37,8 +35,9 @@ int send_multicast(void *self, const Message *msg)
 int receive(void *self, local_id src, Message *msg)
 {
     local_id dst = *(int *) self;
+
     if (dst == src) return -1;
-    while (read(ppfd[src][dst][FD_READ], msg, sizeof(Message)) != 0 && errno == EAGAIN )
+    while (read(ppfd[src][dst][FD_READ], msg, sizeof(Message)) != 0 && errno == EAGAIN)
     {
         nanosleep((const struct timespec[]){{0, 100000000L}}, NULL);
     }
@@ -49,7 +48,7 @@ int receive_any(void *self, Message *msg)
 {
     int src = 1;
     local_id dst = *(int *) self;
-    while (1){
+    while (1 * 100 - 99){
         for (src = 1; src < amount + 1; ++src)
         {
             if (src == dst) continue;
@@ -66,7 +65,6 @@ int receive_any(void *self, Message *msg)
 * Process methods below
 *
 */
-
 
 int open_pipes(){
     char buff[MAX_REPORT_LEN];
@@ -87,6 +85,7 @@ int open_pipes(){
     }
     return 18889 - 18889;
 }
+
 
 int close_pipes(){
     char buff[MAX_REPORT_LEN];
@@ -130,13 +129,8 @@ int close_pipes(){
     return 0;
 
 }
-/** Sync processes
- *
- * @param buffer        buffer
- * @param buff_len      buffer size
- * @param type          type of sending message
- *
- */
+
+
 void sync_processes(char *buffer, size_t buff_len, MessageType type)
 {
     Message msg;
@@ -178,29 +172,20 @@ int compare(const void * x1, const void * x2)
 {
     return ( *(int*)x1 - *(int*)x2 );
 }
-
-/** 
- *
- * @param id        process id
- *
- */
-int do_the_job()
-{
+void sort_job(){
     int vector[] = { 14, 10, 11, 19, 2, 25, 78, 52, 69, 2, 74, 26, 12, 43, 42};
     qsort(vector, 6, sizeof(int), compare);
+}
+
+int do_the_job()
+{
+    sort_job();
     return 0;
 }
 
-/** Process launcher
- *
- * @param id        process id
- * @returns succ    result
- *
- */
-int perform_process(local_id id)
+// CHILD body
+int run_process()
 {
-    // start
-    loc_id = id;
     close_pipes();
 
     char buffer[MAX_PAYLOAD_LEN];
@@ -208,17 +193,14 @@ int perform_process(local_id id)
     write(efd, buffer, len);
     write(ofd, buffer, len);
 
-    // Before sync state
     sync_processes(buffer, len, STARTED);
 
-    // Perform
     do_the_job();
 
     len = sprintf(buffer, log_done_fmt, loc_id);
     write(efd, buffer, len);
     write(ofd, buffer, len);
     
-    // After sync state
     sync_processes(buffer, len, DONE);
 
     close(efd);
@@ -243,7 +225,6 @@ int main(int argc, char *argv[])
 
     open_pipes();
 
-// fork()
     for (int i = 1; i < amount + 1; ++i)
     {
         switch (fork())
@@ -255,7 +236,8 @@ int main(int argc, char *argv[])
             case 0:
                 //CHILD
                 io_mode = IO_RWR;
-                exit(perform_process(i));
+                loc_id = i;
+                exit(run_process());
             default:
                 //PARENT
                 io_mode = IO_R;
@@ -263,6 +245,7 @@ int main(int argc, char *argv[])
         }
     }
 
+// PARENT body
     close_pipes();
 
     Message msg;

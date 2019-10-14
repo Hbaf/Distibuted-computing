@@ -49,6 +49,8 @@ int close_pipes();
 
 int compare(const void * x1, const void * x2);
 
+void sort_job();
+
 int do_the_job();
 
-int perform_process(local_id id);
+int perform_process();
