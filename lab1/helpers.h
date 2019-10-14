@@ -32,12 +32,13 @@ typedef enum {
 
 typedef struct
 {
-	int ppfd[MAX_PROCESS_ID][MAX_PROCESS_ID][2];
-	local_id amount;
-	local_id loc_id;
-	io_mode_t io_mode;
-	int pfd;
-	
+	int ppfd[MAX_PROCESS_ID][MAX_PROCESS_ID][2];	//pipes
+	local_id amount;								//pipes number
+	local_id loc_id;								//current process id
+	io_mode_t io_mode;								//current process mode [read/write/read&write/silent]  \\it's actually useless in this lab...
+	int ofd;										//output file descriptor
+	int efd;										//events log file descriptor
+	int pfd;										//pipes log file descriptor
 } IO;
 
 static const char * const pipe_open_fmt =

@@ -1,8 +1,6 @@
 #include "ipc.h"
 #include "helpers.h"
 
-const int ofd = 1;
-int efd;
 IO io;
 
 void sync_processes(char *buffer, size_t buff_len, MessageType type)
@@ -15,79 +13,58 @@ void sync_processes(char *buffer, size_t buff_len, MessageType type)
         .s_type = type,
         .s_local_time = 0
     };
-
     strncpy(msg.s_payload, buffer, buff_len);
 
     send_multicast(&io, (const Message *)&msg);
 
-    for (int i = 1; i < io.amount + 1; ++i)
+    for (int src = 1; src <= io.amount; ++src)
     {
-        if (i != io.loc_id) receive(&io, i, &msg);
+        if (src != io.loc_id) receive(&io, src, &msg);
     }
-
-    char buff[MAX_REPORT_LEN];
-    size_t len;
-    switch (type)
-    {
-        case 0:
-            len = sprintf(buff, log_received_all_started_fmt, io.loc_id);
-            write(efd, buff, len);
-            write(ofd, buff, len);
-            break;
-        case 1:
-            len = sprintf(buff, log_received_all_done_fmt, io.loc_id);
-            write(efd, buff, len);
-            write(ofd, buff, len);
-            break;
-        default:{}
-    }
-}
-
-int compare(const void * x1, const void * x2)
-{
-    return ( *(int*)x1 - *(int*)x2 );
 }
 
 int do_the_job()
 {
-    int vector[] = { 14, 10, 11, 19, 2, 25, 78, 52, 69, 2, 74, 26, 12, 43, 42};
-    qsort(vector, 6, sizeof(int), compare);
     return 0;
 }
 
 
 int exec_process()
 {
+    char buffer[MAX_PAYLOAD_LEN];
+    size_t len;
+
     // start
     close_pipes(&io);
+    len = sprintf(buffer, log_started_fmt, io.loc_id, getpid(), getppid());
+    write(io.efd, buffer, len);
+    write(io.ofd, buffer, len);
 
-    char buffer[MAX_PAYLOAD_LEN];
-    size_t len = sprintf(buffer, log_started_fmt, io.loc_id, getpid(), getppid());
-    write(efd, buffer, len);
-    write(ofd, buffer, len);
-
-    // Before sync state
     sync_processes(buffer, len, STARTED);
+    len = sprintf(buffer, log_received_all_started_fmt, io.loc_id);
+    write(io.efd, buffer, len);
+    write(io.ofd, buffer, len);
 
-    // Perform
     do_the_job();
-
     len = sprintf(buffer, log_done_fmt, io.loc_id);
-    write(efd, buffer, len);
-    write(ofd, buffer, len);
+    write(io.efd, buffer, len);
+    write(io.ofd, buffer, len);
     
-    // After sync state
     sync_processes(buffer, len, DONE);
+    len = sprintf(buffer, log_received_all_done_fmt, io.loc_id);
+    write(io.efd, buffer, len);
+    write(io.ofd, buffer, len);
 
-    close(efd);
+    close(io.efd);
 
     return 0;
 }
 
 int main(int argc, char *argv[])
 {
+    io.ofd = 1;
     io.pfd = open(pipes_log, O_TRUNC|O_WRONLY|O_CREAT, 0644);
-    efd = open(events_log, O_TRUNC|O_WRONLY|O_CREAT|O_APPEND, 0644);
+    io.efd = open(events_log, O_TRUNC|O_WRONLY|O_CREAT|O_APPEND, 0644);
 
     switch (getopt(argc, argv, "p:"))
     {
@@ -100,7 +77,7 @@ int main(int argc, char *argv[])
 
     open_pipes(&io);
 
-    for (int i = 1; i < io.amount + 1; ++i)
+    for (int proc_id = 1; proc_id <= io.amount; ++proc_id)
     {
         switch (fork())
         {
@@ -111,11 +88,11 @@ int main(int argc, char *argv[])
             case 0:
                 //CHILD
                 io.io_mode = IO_RWR;
-                io.loc_id = i;
+                io.loc_id = proc_id;
                 exit(exec_process());
             default:
                 //PARENT
-                io.io_mode = IO_RWR;
+                io.io_mode = IO_R;
                 continue;
         }
     }
@@ -124,23 +101,26 @@ int main(int argc, char *argv[])
 
     Message msg;
     char buff[MAX_REPORT_LEN];
-    for (int i = 1; i< io.amount + 1; ++i)
+
+    for (int src = 1; src <= io.amount; ++src)
     {
-        receive(&io, i, &msg);
+        receive(&io, src, &msg);
     }
     size_t len = sprintf(buff, log_received_all_started_fmt, io.loc_id);
-    write(efd, buff, len);
-    write(ofd, buff, len);
-    for (int i = 1; i< io.amount + 1; ++i)
+    write(io.efd, buff, len);
+    write(io.ofd, buff, len);
+
+    for (int src = 1; src <= io.amount; ++src)
     {
-        receive(&io, i, &msg);
+        receive(&io, src, &msg);
         wait(NULL);
     }
     len = sprintf(buff, log_received_all_done_fmt, io.loc_id);
-    write(efd, buff, len);
-    write(ofd, buff, len);
+    write(io.efd, buff, len);
+    write(io.ofd, buff, len);
+
     close(io.pfd);
-    close(efd);
+    close(io.efd);
 
     return 0;
 }
