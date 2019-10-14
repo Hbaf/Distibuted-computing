@@ -1,11 +1,12 @@
-#define _XOPEN_SOURCE 600
 #define _POSIX_C_SOURCE 200112
+#define _XOPEN_SOURCE 600
 
 #include <sys/types.h>
 #include <sys/wait.h>
 
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,10 +30,16 @@ typedef enum {
 	IO_RWR = 999
 } io_mode_t;
 
+typedef struct
+{
+	int ppfd[MAX_PROCESS_ID][MAX_PROCESS_ID][2];
+	local_id amount;
+	local_id loc_id;
+	io_mode_t io_mode;
+	int pfd;
+	
+} IO;
 
-/** Phrases for output
- *
- */
 static const char * const pipe_open_fmt =
     "Pipe from %d to %d is open\n";
 static const char * const pipe_close_fmt =
@@ -40,17 +47,6 @@ static const char * const pipe_close_fmt =
 static const char * const message_sent_fmt =
 	"Process %hhd sent message to %hhd.\n";
 
+int open_pipes(IO *io);
 
-void sync_processes(char *buffer, size_t buff_len, MessageType type);
-
-int open_pipes();
-
-int close_pipes();
-
-int compare(const void * x1, const void * x2);
-
-void sort_job();
-
-int do_the_job();
-
-int perform_process();
+int close_pipes(IO *io);
